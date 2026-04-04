@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Am I in Thailand?</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      min-height: 100dvh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f9f9f7;
+      color: #111;
+    }
+
+    main {
+      text-align: center;
+      padding: 2rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.75rem;
+    }
+
+    h1 {
+      font-size: clamp(1.4rem, 5vw, 2.2rem);
+      font-weight: 600;
+      letter-spacing: -0.02em;
+    }
+
+    #face {
+      width: 160px;
+      height: 160px;
+    }
+
+    #mouth {
+      transition: d 0.35s ease;
+    }
+
+    #answer {
+      font-size: clamp(1.5rem, 6vw, 2.5rem);
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      min-height: 1.2em;
+    }
+
+    #note {
+      font-size: 0.82rem;
+      color: #888;
+      max-width: 280px;
+      line-height: 1.5;
+    }
+
+    button {
+      background: none;
+      border: 1.5px solid #ccc;
+      padding: 0.45rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      color: #555;
+      transition: border-color 0.15s, color 0.15s;
+    }
+
+    button:hover { border-color: #999; color: #111; }
+
+    .hidden { display: none; }
+
+    @keyframes blink {
+      0%, 90%, 100% { transform: scaleY(1); }
+      95% { transform: scaleY(0.1); }
+    }
+
+    .checking #eye-left,
+    .checking #eye-right {
+      animation: blink 2.5s ease-in-out infinite;
+      transform-origin: center;
+    }
+
+    .checking #eye-right {
+      animation-delay: 0.1s;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Am I in Thailand?</h1>
+
+    <svg id="face" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <circle cx="50" cy="50" r="45" fill="none" stroke="#111" stroke-width="2.5"/>
+      <circle id="eye-left"  cx="35" cy="41" r="4" fill="#111"/>
+      <circle id="eye-right" cx="65" cy="41" r="4" fill="#111"/>
+      <path id="mouth" d="M 35 63 Q 50 63 65 63"
+            fill="none" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
+    </svg>
+
+    <p id="answer" aria-live="polite">Checking…</p>
+    <p id="note"   aria-live="polite" class="hidden"></p>
+    <button id="retry" class="hidden">Check again</button>
+  </main>
+
+  <script>
+    // Bounding box for Thailand (approximate)
+    const TH = { minLat: 5.5, maxLat: 20.5, minLon: 97.3, maxLon: 105.7 };
+
+    const face   = document.getElementById('face');
+    const mouth  = document.getElementById('mouth');
+    const answer = document.getElementById('answer');
+    const note   = document.getElementById('note');
+    const retry  = document.getElementById('retry');
+
+    const MOUTHS = {
+      neutral: 'M 35 63 Q 50 63 65 63',
+      happy:   'M 35 62 Q 50 75 65 62',
+      sad:     'M 35 69 Q 50 57 65 69',
+    };
+
+    function setFace(state) {
+      mouth.setAttribute('d', MOUTHS[state] || MOUTHS.neutral);
+    }
+
+    function setChecking() {
+      face.classList.add('checking');
+      setFace('neutral');
+      answer.textContent = 'Checking…';
+      note.textContent = '';
+      note.classList.add('hidden');
+      retry.classList.add('hidden');
+    }
+
+    function showResult(inThailand, approximate) {
+      face.classList.remove('checking');
+      setFace(inThailand ? 'happy' : 'sad');
+      answer.textContent = inThailand ? 'Yes.' : 'No.';
+      if (approximate) {
+        note.textContent = 'Based on your approximate network location.';
+        note.classList.remove('hidden');
+      }
+      retry.classList.remove('hidden');
+    }
+
+    function showIndeterminate() {
+      face.classList.remove('checking');
+      setFace('neutral');
+      answer.textContent = "Can't tell.";
+      note.textContent = 'Location could not be determined.';
+      note.classList.remove('hidden');
+      retry.classList.remove('hidden');
+    }
+
+    function isInThailand(lat, lon) {
+      return lat >= TH.minLat && lat <= TH.maxLat &&
+             lon >= TH.minLon && lon <= TH.maxLon;
+    }
+
+    async function tryGeoIP() {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      try {
+        const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
+        clearTimeout(timer);
+        if (!res.ok) return false;
+        const data = await res.json();
+        if (data.country_code) {
+          showResult(data.country_code === 'TH', true);
+          return true;
+        }
+      } catch {
+        clearTimeout(timer);
+      }
+      return false;
+    }
+
+    async function check() {
+      setChecking();
+
+      // No Geolocation API available — go straight to GeoIP
+      if (!navigator.geolocation) {
+        const ok = await tryGeoIP();
+        if (!ok) showIndeterminate();
+        return;
+      }
+
+      await new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            showResult(isInThailand(pos.coords.latitude, pos.coords.longitude), false);
+            resolve();
+          },
+          async () => {
+            // Denied, unavailable, or timed out — fall back to GeoIP
+            const ok = await tryGeoIP();
+            if (!ok) showIndeterminate();
+            resolve();
+          },
+          { timeout: 8000, maximumAge: 60000 }
+        );
+      });
+    }
+
+    retry.addEventListener('click', check);
+    check();
+  </script>
+</body>
+</html>
