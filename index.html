@@ -37,8 +37,9 @@
       height: 160px;
     }
 
+    /* Slow mouth morph when revealing result */
     #mouth {
-      transition: d 0.35s ease;
+      transition: d 2.2s cubic-bezier(0.45, 0, 0.55, 1);
     }
 
     #answer {
@@ -70,19 +71,32 @@
 
     .hidden { display: none; }
 
-    @keyframes blink {
-      0%, 90%, 100% { transform: scaleY(1); }
-      95% { transform: scaleY(0.1); }
+    /* Eyes scan left then right while checking */
+    @keyframes look-around {
+      0%         { transform: translateX(0); }
+      10%        { transform: translateX(5px); }
+      40%        { transform: translateX(5px); }
+      60%        { transform: translateX(-5px); }
+      90%        { transform: translateX(-5px); }
+      100%       { transform: translateX(0); }
     }
 
-    .checking #eye-left,
-    .checking #eye-right {
-      animation: blink 2.5s ease-in-out infinite;
+    .checking .eye {
+      animation: look-around 2.8s ease-in-out infinite;
+      transform-box: fill-box;
       transform-origin: center;
     }
 
+    /* Stagger right eye slightly so they don't move in perfect lockstep */
     .checking #eye-right {
-      animation-delay: 0.1s;
+      animation-delay: 0.06s;
+    }
+
+    /* Smoothly return eyes to centre when animation is removed */
+    .eye {
+      transition: transform 0.4s ease;
+      transform-box: fill-box;
+      transform-origin: center;
     }
   </style>
 </head>
@@ -92,8 +106,8 @@
 
     <svg id="face" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
       <circle cx="50" cy="50" r="45" fill="none" stroke="#111" stroke-width="2.5"/>
-      <circle id="eye-left"  cx="35" cy="41" r="4" fill="#111"/>
-      <circle id="eye-right" cx="65" cy="41" r="4" fill="#111"/>
+      <circle id="eye-left"  class="eye" cx="35" cy="41" r="4" fill="#111"/>
+      <circle id="eye-right" class="eye" cx="65" cy="41" r="4" fill="#111"/>
       <path id="mouth" d="M 35 63 Q 50 63 65 63"
             fill="none" stroke="#111" stroke-width="2.5" stroke-linecap="round"/>
     </svg>
@@ -104,7 +118,6 @@
   </main>
 
   <script>
-    // Bounding box for Thailand (approximate)
     const TH = { minLat: 5.5, maxLat: 20.5, minLon: 97.3, maxLon: 105.7 };
 
     const face   = document.getElementById('face');
@@ -119,36 +132,50 @@
       sad:     'M 35 69 Q 50 57 65 69',
     };
 
-    function setFace(state) {
-      mouth.setAttribute('d', MOUTHS[state] || MOUTHS.neutral);
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+    // Minimum time to show the "checking" animation before revealing result.
+    const MIN_CHECK_MS = 2000;
+
+    function resetFace() {
+      // Disable the slow reveal transition while resetting to neutral
+      mouth.style.transition = 'none';
+      mouth.setAttribute('d', MOUTHS.neutral);
+      // Re-enable on next frame so the reset isn't animated
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        mouth.style.transition = '';
+      }));
     }
 
     function setChecking() {
       face.classList.add('checking');
-      setFace('neutral');
+      resetFace();
       answer.textContent = 'Checking…';
       note.textContent = '';
       note.classList.add('hidden');
       retry.classList.add('hidden');
     }
 
-    function showResult(inThailand, approximate) {
+    async function reveal(mouthState, answerText, noteText) {
+      // 1. Stop eye animation — eyes glide back to centre via CSS transition
       face.classList.remove('checking');
-      setFace(inThailand ? 'happy' : 'sad');
-      answer.textContent = inThailand ? 'Yes.' : 'No.';
-      if (approximate) {
-        note.textContent = 'Based on your approximate network location.';
+
+      // 2. Brief pause so eyes settle before anything changes
+      await sleep(350);
+
+      // 3. Change text
+      answer.textContent = answerText;
+
+      // 4. Tiny gap, then start the slow mouth morph
+      await sleep(80);
+      mouth.setAttribute('d', MOUTHS[mouthState]);
+
+      // 5. After the morph completes, show supporting note + retry
+      await sleep(2400);
+      if (noteText) {
+        note.textContent = noteText;
         note.classList.remove('hidden');
       }
-      retry.classList.remove('hidden');
-    }
-
-    function showIndeterminate() {
-      face.classList.remove('checking');
-      setFace('neutral');
-      answer.textContent = "Can't tell.";
-      note.textContent = 'Location could not be determined.';
-      note.classList.remove('hidden');
       retry.classList.remove('hidden');
     }
 
@@ -163,43 +190,49 @@
       try {
         const res = await fetch('https://ipapi.co/json/', { signal: controller.signal });
         clearTimeout(timer);
-        if (!res.ok) return false;
+        if (!res.ok) return null;
         const data = await res.json();
-        if (data.country_code) {
-          showResult(data.country_code === 'TH', true);
-          return true;
-        }
+        if (data.country_code) return data.country_code === 'TH';
       } catch {
         clearTimeout(timer);
       }
-      return false;
+      return null;
     }
 
     async function check() {
       setChecking();
+      const started = Date.now();
 
-      // No Geolocation API available — go straight to GeoIP
-      if (!navigator.geolocation) {
-        const ok = await tryGeoIP();
-        if (!ok) showIndeterminate();
-        return;
+      let inThailand = null;
+      let approximate = false;
+
+      // Try browser geolocation
+      if (navigator.geolocation) {
+        inThailand = await new Promise((resolve) => {
+          navigator.geolocation.getCurrentPosition(
+            (pos) => resolve(isInThailand(pos.coords.latitude, pos.coords.longitude)),
+            ()    => resolve(null),
+            { timeout: 8000, maximumAge: 60000 }
+          );
+        });
       }
 
-      await new Promise((resolve) => {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            showResult(isInThailand(pos.coords.latitude, pos.coords.longitude), false);
-            resolve();
-          },
-          async () => {
-            // Denied, unavailable, or timed out — fall back to GeoIP
-            const ok = await tryGeoIP();
-            if (!ok) showIndeterminate();
-            resolve();
-          },
-          { timeout: 8000, maximumAge: 60000 }
-        );
-      });
+      // Fall back to GeoIP if geolocation failed or was denied
+      if (inThailand === null) {
+        inThailand = await tryGeoIP();
+        if (inThailand !== null) approximate = true;
+      }
+
+      // Ensure the checking animation plays for at least MIN_CHECK_MS
+      const elapsed = Date.now() - started;
+      if (elapsed < MIN_CHECK_MS) await sleep(MIN_CHECK_MS - elapsed);
+
+      if (inThailand === null) {
+        await reveal('neutral', "Can't tell.", 'Location could not be determined.');
+      } else {
+        const noteText = approximate ? 'Based on your approximate network location.' : null;
+        await reveal(inThailand ? 'happy' : 'sad', inThailand ? 'Yes.' : 'No.', noteText);
+      }
     }
 
     retry.addEventListener('click', check);
