@@ -88,6 +88,32 @@
 
     .hidden { display: none; }
 
+    #iab-banner {
+      font-size: 0.82rem;
+      color: #7a5c00;
+      background: #fff8e1;
+      border: 1px solid #ffe082;
+      border-radius: 10px;
+      padding: 0.6rem 1rem;
+      max-width: 280px;
+      line-height: 1.5;
+      text-align: center;
+    }
+
+    #iab-open {
+      display: inline-block;
+      margin-top: 0.5rem;
+      font-size: 0.8rem;
+      color: #555;
+      background: none;
+      border: 1.5px solid #bbb;
+      border-radius: 999px;
+      padding: 0.3rem 0.9rem;
+      cursor: pointer;
+    }
+
+    #iab-open:hover { border-color: #999; color: #111; }
+
     /* Eyes scan left then right while checking */
     @keyframes look-around {
       0%         { transform: translateX(0); }
@@ -132,6 +158,10 @@
     <p id="answer" aria-live="polite">Checking…</p>
     <p id="note"   aria-live="polite" class="hidden"></p>
     <button id="retry" class="hidden">Check again</button>
+    <div id="iab-banner" class="hidden">
+      Facebook's browser may show the wrong result.<br>
+      <button id="iab-open">Open in your browser</button>
+    </div>
   </main>
 
   <script>
@@ -141,7 +171,9 @@
     const mouth  = document.getElementById('mouth');
     const answer = document.getElementById('answer');
     const note   = document.getElementById('note');
-    const retry  = document.getElementById('retry');
+    const retry     = document.getElementById('retry');
+    const iabBanner = document.getElementById('iab-banner');
+    const iabOpen   = document.getElementById('iab-open');
 
     const MOUTHS = {
       neutral: 'M 35 63 Q 50 63 65 63',
@@ -251,6 +283,17 @@
         await reveal(inThailand ? 'happy' : 'sad', inThailand ? 'Yes.' : 'No.', noteText);
       }
     }
+
+    // Detect Facebook's in-app browser
+    const ua = navigator.userAgent || '';
+    if (/FBAN|FBAV|FB_IAB|FBIOS|FBSS/.test(ua)) {
+      iabBanner.classList.remove('hidden');
+    }
+
+    iabOpen.addEventListener('click', () => {
+      // Try to open in the system browser
+      window.open(window.location.href, '_blank');
+    });
 
     retry.addEventListener('click', check);
     check();
