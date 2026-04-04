@@ -39,7 +39,7 @@
 
     /* Slow mouth morph when revealing result */
     #mouth {
-      transition: d 2.2s cubic-bezier(0.45, 0, 0.55, 1);
+      transition: d 4s cubic-bezier(0.45, 0, 0.55, 1);
     }
 
     #answer {
@@ -171,7 +171,7 @@
       mouth.setAttribute('d', MOUTHS[mouthState]);
 
       // 5. After the morph completes, show supporting note + retry
-      await sleep(2400);
+      await sleep(4200);
       if (noteText) {
         note.textContent = noteText;
         note.classList.remove('hidden');
