@@ -164,7 +164,7 @@
 
     <p id="answer" aria-live="polite">Checking…</p>
     <p id="note"   aria-live="polite" class="hidden"></p>
-    <button id="retry" class="hidden">Check again</button>
+    <button id="share" class="hidden">Share</button>
     <div id="iab-banner" class="hidden">
       Facebook's browser may show the wrong result.<br>
       <button id="iab-open">Open in your browser</button>
@@ -178,9 +178,11 @@
     const mouth  = document.getElementById('mouth');
     const answer = document.getElementById('answer');
     const note   = document.getElementById('note');
-    const retry     = document.getElementById('retry');
+    const share     = document.getElementById('share');
     const iabBanner = document.getElementById('iab-banner');
     const iabOpen   = document.getElementById('iab-open');
+
+    let currentResult = null; // 'yes', 'no', or null
 
     const MOUTHS = {
       neutral: 'M 35 63 Q 50 63 65 63',
@@ -209,7 +211,7 @@
       answer.textContent = 'Checking…';
       note.textContent = '';
       note.classList.add('hidden');
-      retry.classList.add('hidden');
+      share.classList.add('hidden');
     }
 
     async function reveal(mouthState, answerText, noteText) {
@@ -226,13 +228,13 @@
       await sleep(80);
       mouth.setAttribute('d', MOUTHS[mouthState]);
 
-      // 5. After the morph completes, show supporting note + retry
+      // 5. After the morph completes, show supporting note + share
       await sleep(4200);
       if (noteText) {
         note.textContent = noteText;
         note.classList.remove('hidden');
       }
-      retry.classList.remove('hidden');
+      share.classList.remove('hidden');
     }
 
     function isInThailand(lat, lon) {
@@ -260,7 +262,6 @@
       const started = Date.now();
 
       let inThailand = null;
-      let approximate = false;
 
       // Try browser geolocation
       if (navigator.geolocation) {
@@ -276,7 +277,6 @@
       // Fall back to GeoIP if geolocation failed or was denied
       if (inThailand === null) {
         inThailand = await tryGeoIP();
-        if (inThailand !== null) approximate = true;
       }
 
       // Ensure the checking animation plays for at least MIN_CHECK_MS
@@ -284,10 +284,11 @@
       if (elapsed < MIN_CHECK_MS) await sleep(MIN_CHECK_MS - elapsed);
 
       if (inThailand === null) {
+        currentResult = null;
         await reveal('neutral', "Can't tell.", 'Location could not be determined.');
       } else {
-        const noteText = approximate ? 'Based on your approximate network location.' : null;
-        await reveal(inThailand ? 'happy' : 'sad', inThailand ? 'Yes.' : 'No.', noteText);
+        currentResult = inThailand ? 'yes' : 'no';
+        await reveal(inThailand ? 'happy' : 'sad', inThailand ? 'Yes.' : 'No.', null);
       }
     }
 
@@ -302,7 +303,27 @@
       window.open(window.location.href, '_blank');
     });
 
-    retry.addEventListener('click', check);
+    share.addEventListener('click', () => {
+      const url = 'https://amiinthailand.com';
+      let text;
+      if (currentResult === 'yes') {
+        text = "Great news: I've confirmed that I am, in fact, in Thailand. Frankly, this confirms a long-standing suspicion. Check your own Thailand status here:";
+      } else if (currentResult === 'no') {
+        text = "Bad news: I've just found out that I am not in Thailand. This is upsetting, and possibly spreading. Please check your Thailand status here, and then let's discuss emergency next steps:";
+      } else {
+        text = "I tried to find out if I'm in Thailand. It didn't go well. Check your own status:";
+      }
+      if (navigator.share) {
+        navigator.share({ text: text + ' ' + url });
+      } else {
+        navigator.clipboard.writeText(text + ' ' + url).then(() => {
+          const orig = share.textContent;
+          share.textContent = 'Copied!';
+          setTimeout(() => { share.textContent = orig; }, 2000);
+        });
+      }
+    });
+
     check();
   </script>
 </body>
