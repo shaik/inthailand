@@ -5,6 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Am I in Thailand?</title>
 
+  <!-- Redirect GitHub Pages URL to custom domain -->
+  <script>
+    if (window.location.hostname === 'shaik.github.io') {
+      window.location.replace('https://amiinthailand.com' + window.location.pathname.replace('/inthailand', '') + window.location.search + window.location.hash);
+    }
+  </script>
+
   <!-- Google Analytics -->
   <script async src="https://www.googletagmanager.com/gtag/js?id=G-4FLWL0XLF3"></script>
   <script>
