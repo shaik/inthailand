@@ -1,0 +1,7 @@
+name = "amiinthailand"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[[routes]]
+pattern = "amiinthailand.com/*"
+zone_name = "amiinthailand.com"

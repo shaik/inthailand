@@ -247,6 +247,11 @@
              lon >= TH.minLon && lon <= TH.maxLon;
     }
 
+    function getEdgeCountry() {
+      const cc = document.body.getAttribute('data-geo-country');
+      return (cc && /^[A-Z]{2}$/.test(cc)) ? cc : null;
+    }
+
     async function tryGeoIP() {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 6000);
@@ -268,8 +273,14 @@
 
       let inThailand = null;
 
-      // Try browser geolocation
-      if (navigator.geolocation) {
+      // Step 0: Edge country code injected by Cloudflare Worker (instant, no popup)
+      const edgeCountry = getEdgeCountry();
+      if (edgeCountry !== null) {
+        inThailand = (edgeCountry === 'TH');
+      }
+
+      // Step 1: Browser geolocation (skipped when edge succeeded)
+      if (inThailand === null && navigator.geolocation) {
         inThailand = await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
             (pos) => resolve(isInThailand(pos.coords.latitude, pos.coords.longitude)),
@@ -279,7 +290,7 @@
         });
       }
 
-      // Fall back to GeoIP if geolocation failed or was denied
+      // Step 2: GeoIP fallback (skipped when either earlier step succeeded)
       if (inThailand === null) {
         inThailand = await tryGeoIP();
       }
