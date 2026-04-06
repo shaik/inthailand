@@ -1,10 +1,9 @@
 export default {
   async fetch(request, env, ctx) {
-    const url = new URL(request.url);
-    const originURL = `https://shaik.github.io/inthailand${url.pathname}${url.search}`;
-    const originResponse = await fetch(new Request(originURL, request));
+    // Serve static files from Cloudflare Assets (no origin fetch = no redirect loop)
+    const originResponse = await env.ASSETS.fetch(request);
 
-    // Pass assets through unchanged
+    // Pass non-HTML assets through unchanged
     const contentType = originResponse.headers.get('Content-Type') ?? '';
     if (!contentType.startsWith('text/html')) {
       return originResponse;
