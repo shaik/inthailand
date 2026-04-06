@@ -10,3 +10,17 @@ run_worker_first = true
 [[routes]]
 pattern = "amiinthailand.com/*"
 zone_name = "amiinthailand.com"
+
+[env.staging]
+name = "amiinthailand-staging"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+[env.staging.assets]
+directory = "."
+binding = "ASSETS"
+run_worker_first = true
+
+[[env.staging.routes]]
+pattern = "staging.amiinthailand.com/*"
+zone_name = "amiinthailand.com"

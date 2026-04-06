@@ -153,13 +153,99 @@
       transform-box: fill-box;
       transform-origin: center;
     }
+
+    /* Staging banner */
+    #staging-banner {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      font-size: 0.72rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #999;
+      background: rgba(249, 249, 247, 0.85);
+      border-bottom: 1px solid #e0e0de;
+      border-radius: 0 0 6px 6px;
+      padding: 0.2rem 0.75rem;
+      z-index: 50;
+      pointer-events: none;
+    }
+
+    /* About modal */
+    #about-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.45);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #about-backdrop.hidden { display: none; }
+
+    #about-panel {
+      position: relative;
+      background: #f9f9f7;
+      border: 1px solid #ddd;
+      border-radius: 14px;
+      padding: 1.75rem 1.5rem 1.5rem;
+      max-width: 320px;
+      width: calc(100% - 2rem);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      text-align: left;
+    }
+
+    #about-panel h2 { font-size: 1.1rem; font-weight: 600; letter-spacing: -0.01em; }
+    #about-version, #about-credit { font-size: 0.82rem; color: #555; }
+
+    #about-disclaimer {
+      font-size: 0.82rem;
+      color: #888;
+      line-height: 1.5;
+      border-top: 1px solid #eee;
+      padding-top: 0.75rem;
+    }
+
+    #about-close {
+      position: absolute;
+      top: 0.75rem;
+      right: 0.9rem;
+      border: none;
+      background: none;
+      font-size: 1.2rem;
+      color: #999;
+      cursor: pointer;
+      padding: 0.2rem 0.4rem;
+      line-height: 1;
+    }
+    #about-close:hover { color: #111; border-color: transparent; }
+
+    #about-debug-area { display: flex; flex-direction: column; gap: 0.5rem; }
+    #about-debug-area.hidden { display: none; }
+
+    #about-debug-pre {
+      font-size: 0.7rem;
+      line-height: 1.4;
+      background: #f0f0ee;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      padding: 0.6rem;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre;
+      color: #333;
+    }
   </style>
 </head>
 <body>
+  <div id="staging-banner" class="hidden">staging</div>
   <main>
     <h1>Am I in Thailand?</h1>
 
-    <svg id="face" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <svg id="face" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="touch-action: none; user-select: none;">
       <circle cx="50" cy="50" r="45" fill="none" stroke="#111" stroke-width="2.5"/>
       <circle id="eye-left"  class="eye" cx="35" cy="41" r="4" fill="#111"/>
       <circle id="eye-right" class="eye" cx="65" cy="41" r="4" fill="#111"/>
@@ -176,6 +262,22 @@
     </div>
   </main>
 
+  <!-- About modal -->
+  <div id="about-backdrop" class="hidden" role="dialog" aria-modal="true" aria-label="About">
+    <div id="about-panel">
+      <button id="about-close" aria-label="Close">×</button>
+      <h2>Am I in Thailand?</h2>
+      <p id="about-version"></p>
+      <p id="about-credit">Made by Shai Kfir</p>
+      <p id="about-disclaimer">A rigorous independent investigation into your current geographical relationship with Thailand. Results are approximate and non-binding.</p>
+      <button id="about-debug-btn">Get Debug Info</button>
+      <div id="about-debug-area" class="hidden">
+        <pre id="about-debug-pre"></pre>
+        <button id="about-copy-btn">Copy</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     const TH = { minLat: 5.5, maxLat: 20.5, minLon: 97.3, maxLon: 105.7 };
 
@@ -187,7 +289,17 @@
     const iabBanner = document.getElementById('iab-banner');
     const iabOpen   = document.getElementById('iab-open');
 
+    // Staging indicator
+    if (window.location.hostname === 'staging.amiinthailand.com') {
+      document.getElementById('staging-banner').classList.remove('hidden');
+    }
+
     let currentResult = null; // 'yes', 'no', or null
+
+    const VERSION = '1.0';
+    let detectionMethod = 'none'; // 'edge' | 'geolocation' | 'geoip' | 'none'
+    let geoState   = { available: false, status: 'skipped', lat: null, lon: null };
+    let geoipState = { status: 'skipped', country: null };
 
     const MOUTHS = {
       neutral: 'M 35 63 Q 50 63 65 63',
@@ -253,6 +365,7 @@
     }
 
     async function tryGeoIP() {
+      geoipState.status = 'failed';
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 6000);
       try {
@@ -260,7 +373,11 @@
         clearTimeout(timer);
         if (!res.ok) return null;
         const data = await res.json();
-        if (data.country_code) return data.country_code === 'TH';
+        if (data.country_code) {
+          geoipState.status  = 'succeeded';
+          geoipState.country = data.country_code;
+          return data.country_code === 'TH';
+        }
       } catch {
         clearTimeout(timer);
       }
@@ -268,6 +385,9 @@
     }
 
     async function check() {
+      detectionMethod = 'none';
+      geoState   = { available: false, status: 'skipped', lat: null, lon: null };
+      geoipState = { status: 'skipped', country: null };
       setChecking();
       const started = Date.now();
 
@@ -277,22 +397,34 @@
       const edgeCountry = getEdgeCountry();
       if (edgeCountry !== null) {
         inThailand = (edgeCountry === 'TH');
+        detectionMethod = 'edge';
       }
 
       // Step 1: Browser geolocation (skipped when edge succeeded)
       if (inThailand === null && navigator.geolocation) {
+        geoState.available = true;
         inThailand = await new Promise((resolve) => {
           navigator.geolocation.getCurrentPosition(
-            (pos) => resolve(isInThailand(pos.coords.latitude, pos.coords.longitude)),
-            ()    => resolve(null),
+            (pos) => {
+              geoState.status = 'succeeded';
+              geoState.lat = pos.coords.latitude;
+              geoState.lon = pos.coords.longitude;
+              resolve(isInThailand(pos.coords.latitude, pos.coords.longitude));
+            },
+            (err) => {
+              geoState.status = err.code === 1 ? 'denied' : err.code === 3 ? 'timeout' : 'error';
+              resolve(null);
+            },
             { timeout: 8000, maximumAge: 60000 }
           );
         });
+        if (inThailand !== null) detectionMethod = 'geolocation';
       }
 
       // Step 2: GeoIP fallback (skipped when either earlier step succeeded)
       if (inThailand === null) {
         inThailand = await tryGeoIP();
+        if (inThailand !== null) detectionMethod = 'geoip';
       }
 
       // Ensure the checking animation plays for at least MIN_CHECK_MS
@@ -307,6 +439,97 @@
         await reveal(inThailand ? 'happy' : 'sad', inThailand ? 'Yes.' : 'No.', null);
       }
     }
+
+    function collectDebugInfo() {
+      const edgeCountry = getEdgeCountry() ?? 'none';
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const isStaging = window.location.hostname === 'staging.amiinthailand.com';
+      const answer = currentResult === 'yes' ? 'yes' : currentResult === 'no' ? 'no' : "can't tell";
+      const coords = (geoState.lat !== null && geoState.lon !== null)
+        ? `${geoState.lat}, ${geoState.lon}` : '—';
+
+      return [
+        '=== Am I in Thailand? — Debug Report ===',
+        `Generated: ${new Date().toISOString()} (${tz})`,
+        '',
+        'RESULT',
+        `  Answer:            ${answer}`,
+        `  Detection method:  ${detectionMethod}`,
+        `  Edge country:      ${edgeCountry}`,
+        `  URL:               ${window.location.href}`,
+        '',
+        'GEOLOCATION',
+        `  API available:     ${navigator.geolocation ? 'yes' : 'no'}`,
+        `  Status:            ${geoState.status}`,
+        `  Coordinates:       ${coords}`,
+        '',
+        'GEOIP (ipapi.co)',
+        `  Status:            ${geoipState.status}`,
+        `  Country:           ${geoipState.country ?? '—'}`,
+        '',
+        'BROWSER',
+        `  User agent:        ${navigator.userAgent}`,
+        `  Language:          ${navigator.language}`,
+        `  Timezone:          ${tz}`,
+        `  Online:            ${navigator.onLine ? 'yes' : 'no'}`,
+        `  Screen:            ${screen.width} × ${screen.height} @ ${window.devicePixelRatio}`,
+        `  Viewport:          ${window.innerWidth} × ${window.innerHeight}`,
+        `  Web Share API:     ${navigator.share ? 'available' : 'not available'}`,
+        '',
+        'ENVIRONMENT',
+        `  Facebook IAB:      ${/FBAN|FBAV|FB_IAB|FBIOS|FBSS/.test(navigator.userAgent) ? 'yes' : 'no'}`,
+        `  Host:              ${window.location.hostname}`,
+        `  Protocol:          ${window.location.protocol}`,
+        `  Staging:           ${isStaging ? 'yes' : 'no'}`,
+        '=====================================',
+      ].join('\n');
+    }
+
+    function showAbout() {
+      const isStaging = window.location.hostname === 'staging.amiinthailand.com';
+      document.getElementById('about-version').textContent = 'v' + VERSION + (isStaging ? ' (staging)' : '');
+      document.getElementById('about-debug-area').classList.add('hidden');
+      document.getElementById('about-debug-pre').textContent = '';
+      document.getElementById('about-copy-btn').textContent = 'Copy';
+      document.getElementById('about-backdrop').classList.remove('hidden');
+    }
+
+    function hideAbout() {
+      document.getElementById('about-backdrop').classList.add('hidden');
+    }
+
+    document.getElementById('about-close').addEventListener('click', hideAbout);
+    document.getElementById('about-backdrop').addEventListener('click', (e) => {
+      if (e.target === document.getElementById('about-backdrop')) hideAbout();
+    });
+    document.getElementById('about-debug-btn').addEventListener('click', () => {
+      document.getElementById('about-debug-pre').textContent = collectDebugInfo();
+      document.getElementById('about-debug-area').classList.remove('hidden');
+    });
+    document.getElementById('about-copy-btn').addEventListener('click', () => {
+      const btn = document.getElementById('about-copy-btn');
+      navigator.clipboard.writeText(document.getElementById('about-debug-pre').textContent)
+        .then(() => { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy'; }, 2000); });
+    });
+
+    // Long-press on face to open About modal
+    const LONG_PRESS_MS = 600;
+    let pressTimer = null, pressStartX = 0, pressStartY = 0;
+
+    face.addEventListener('pointerdown', (e) => {
+      pressStartX = e.clientX; pressStartY = e.clientY;
+      pressTimer = setTimeout(showAbout, LONG_PRESS_MS);
+    });
+
+    const cancelPress = (e) => {
+      if (e?.type === 'pointermove' && Math.hypot(e.clientX - pressStartX, e.clientY - pressStartY) < 10) return;
+      clearTimeout(pressTimer); pressTimer = null;
+    };
+
+    face.addEventListener('pointerup',     cancelPress);
+    face.addEventListener('pointercancel', cancelPress);
+    face.addEventListener('pointermove',   cancelPress);
+    face.addEventListener('contextmenu',   (e) => e.preventDefault());
 
     // Detect Facebook's in-app browser
     const ua = navigator.userAgent || '';
