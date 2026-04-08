@@ -8,3 +8,7 @@ CNAME
 .git
 .claude
 .wrangler
+.env.local
+.gitignore
+deploy.sh
+test-production.js
