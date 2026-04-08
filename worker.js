@@ -3,8 +3,19 @@ export default {
     // Serve static files from Cloudflare Assets (no origin fetch = no redirect loop)
     const originResponse = await env.ASSETS.fetch(request);
 
-    // Pass non-HTML assets through unchanged
     const contentType = originResponse.headers.get('Content-Type') ?? '';
+
+    // Give images a proper cache lifetime so crawlers (WhatsApp, Facebook) can cache them
+    if (contentType.startsWith('image/')) {
+      const imgHeaders = new Headers(originResponse.headers);
+      imgHeaders.set('Cache-Control', 'public, max-age=86400');
+      return new Response(originResponse.body, {
+        status: originResponse.status,
+        headers: imgHeaders,
+      });
+    }
+
+    // Pass all other non-HTML assets through unchanged
     if (!contentType.startsWith('text/html')) {
       return originResponse;
     }

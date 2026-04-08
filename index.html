@@ -514,7 +514,7 @@
         text = "I tried to find out if I'm in Thailand. It didn't go well. Check your own status:";
       }
       if (navigator.share) {
-        navigator.share({ text: text + ' ' + url });
+        navigator.share({ text: text, url: url });
       } else {
         navigator.clipboard.writeText(text + ' ' + url).then(() => {
           const orig = share.textContent;
