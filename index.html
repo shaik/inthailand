@@ -30,11 +30,12 @@
   <meta property="og:description" content="Find out instantly.">
   <meta property="og:type"        content="website">
   <meta property="og:url"         content="https://amiinthailand.com">
-  <meta property="og:image"       content="https://amiinthailand.com/og-image.png">
-  <meta property="og:image:width" content="1200">
+  <meta property="og:image"        content="https://amiinthailand.com/og-image.jpg">
+  <meta property="og:image:type"   content="image/jpeg">
+  <meta property="og:image:width"  content="1200">
   <meta property="og:image:height" content="630">
-  <meta name="twitter:card"       content="summary_large_image">
-  <meta name="twitter:image"      content="https://amiinthailand.com/og-image.png">
+  <meta name="twitter:card"        content="summary_large_image">
+  <meta name="twitter:image"       content="https://amiinthailand.com/og-image.jpg">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -421,6 +422,7 @@
       return [
         '=== Am I in Thailand? — Debug Report ===',
         `Generated: ${new Date().toISOString()} (${tz})`,
+        `Version:   ${VERSION}`,
         '',
         'RESULT',
         `  Answer:            ${answer}`,
