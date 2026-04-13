@@ -267,7 +267,7 @@
 
     let currentResult = null; // 'yes', 'no', or null
 
-    const VERSION = '1.05';
+    const VERSION = '1.06';
     let detectionMethod = 'none'; // 'edge' | 'geolocation' | 'geoip' | 'none'
     let geoState   = { available: false, status: 'skipped', lat: null, lon: null };
     let geoipState = { status: 'skipped', country: null };
@@ -364,11 +364,24 @@
 
       let inThailand = null;
 
-      // Step 0: Edge country code injected by Cloudflare Worker (instant, no popup)
+      // Step 0: Edge country code injected by Cloudflare Worker (instant, no popup).
+      // When edge says non-TH, use device timezone as a tiebreaker: Asia/Bangkok
+      // covers Thailand and its IANA aliases Cambodia/Laos, but not Vietnam or Indonesia.
       const edgeCountry = getEdgeCountry();
       if (edgeCountry !== null) {
-        inThailand = (edgeCountry === 'TH');
-        detectionMethod = 'edge';
+        if (edgeCountry === 'TH') {
+          inThailand = true;
+          detectionMethod = 'edge';
+        } else {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (tz === 'Asia/Bangkok') {
+            inThailand = true;
+            detectionMethod = 'timezone';
+          } else {
+            inThailand = false;
+            detectionMethod = 'edge';
+          }
+        }
       }
 
       // Step 1: Browser geolocation (skipped when edge succeeded)
